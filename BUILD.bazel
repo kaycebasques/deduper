@@ -9,6 +9,7 @@ py_binary(
     ],
     main = "deduper.py",
     deps = [
+        requirement("chonkie"),
         requirement("google-genai"),
         requirement("python-dotenv"),
         requirement("requests"),
