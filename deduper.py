@@ -7,48 +7,67 @@ from dotenv import load_dotenv
 from google import genai
 import requests
 
-DEFAULT_ISSUE_URL = "https://github.com/sphinx-doc/sphinx/issues/14541"
 EMBEDDING_MODEL = "gemini-embedding-001"
+MAX_ISSUES = 5
 
 
-def parse_github_issue_url(url: str):
-  """Parses a GitHub issue URL into (owner, repo, issue_number)."""
-  parsed = urllib.parse.urlparse(url)
-  match = re.match(r"^/([^/]+)/([^/]+)/issues/(\d+)", parsed.path)
-  if not match:
-    raise ValueError(f"Invalid GitHub issue URL: {url}")
-  return match.group(1), match.group(2), match.group(3)
-
-
-def get_genai_client(workspace_dir: str):
+def load_env(workspace_dir: str):
+  """Loads environment variables from .env if present."""
   env_path = os.path.join(workspace_dir, ".env")
   if os.path.exists(env_path):
     load_dotenv(env_path)
   else:
     load_dotenv()
+
+
+def get_repo_config(workspace_dir: str):
+  """Derives repo OWNER and REPO from environment, returning (owner, repo, repo_url)."""
+  load_env(workspace_dir)
+  owner = os.environ.get("OWNER")
+  repo = os.environ.get("REPO")
+  if not owner or not repo:
+    raise ValueError(
+        "OWNER and REPO environment variables must be set in .env"
+    )
+  repo_url = f"https://github.com/{owner}/{repo}"
+  return owner, repo, repo_url
+
+
+def get_genai_client(workspace_dir: str):
+  load_env(workspace_dir)
   api_key = os.environ.get("GEMINI_API_KEY")
   if not api_key:
     raise ValueError("GEMINI_API_KEY environment variable is not set.")
   return genai.Client(api_key=api_key)
 
 
-def fetch_and_save_issue(
-    url: str, workspace_dir: str, genai_client: genai.Client
-):
-  owner, repo, issue_number = parse_github_issue_url(url)
-
+def fetch_open_issues(owner: str, repo: str, max_issues: int = MAX_ISSUES):
+  """Fetches open issues (excluding pull requests) for owner/repo."""
   headers = {
       "Accept": "application/vnd.github.raw+json",
       "User-Agent": "deduper/1.0",
   }
-
-  # Fetch issue details (opening post / issue body)
-  issue_api_url = (
-      f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}"
-  )
-  response = requests.get(issue_api_url, headers=headers)
+  url = f"https://api.github.com/repos/{owner}/{repo}/issues?state=open&per_page=30"
+  response = requests.get(url, headers=headers)
   response.raise_for_status()
-  issue_data = response.json()
+  items = response.json()
+
+  issues = [item for item in items if "pull_request" not in item]
+  return issues[:max_issues]
+
+
+def fetch_and_save_issue(
+    owner: str,
+    repo: str,
+    issue_data: dict,
+    workspace_dir: str,
+    genai_client: genai.Client,
+):
+  issue_number = issue_data["number"]
+  headers = {
+      "Accept": "application/vnd.github.raw+json",
+      "User-Agent": "deduper/1.0",
+  }
 
   # Create issues/{issue_number} directory
   issue_dir = os.path.join(workspace_dir, "issues", str(issue_number))
@@ -65,15 +84,16 @@ def fetch_and_save_issue(
       c.get("body") or "" for c in comments_data
   ]
 
+  print(f"\nProcessing Issue #{issue_number} ({len(all_comments)} comments)...")
   for idx, comment_body in enumerate(all_comments, start=1):
     # Save markdown file
     md_path = os.path.join(issue_dir, f"{idx}.md")
     with open(md_path, "w", encoding="utf-8") as f:
       f.write(comment_body)
-    print(f"Saved comment {idx} markdown to {md_path}")
+    print(f"Saved issue #{issue_number} comment {idx} markdown to {md_path}")
 
     # Generate Gemini embedding
-    print(f"Generating embedding for comment {idx}...")
+    print(f"Generating embedding for issue #{issue_number} comment {idx}...")
     embed_res = genai_client.models.embed_content(
         model=EMBEDDING_MODEL,
         contents=comment_body if comment_body.strip() else " ",
@@ -85,16 +105,24 @@ def fetch_and_save_issue(
     with open(json_path, "w", encoding="utf-8") as f:
       json.dump(embedding_values, f)
     print(
-        f"Saved comment {idx} embedding ({len(embedding_values)} dims) to"
-        f" {json_path}"
+        f"Saved issue #{issue_number} comment {idx} embedding"
+        f" ({len(embedding_values)} dims) to {json_path}"
     )
 
 
 def main():
   workspace_dir = os.environ.get("BUILD_WORKSPACE_DIRECTORY", os.getcwd())
+  owner, repo, repo_url = get_repo_config(workspace_dir)
   genai_client = get_genai_client(workspace_dir)
-  issue_url = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_ISSUE_URL
-  fetch_and_save_issue(issue_url, workspace_dir, genai_client)
+
+  print(f"Derived repository URL from .env: {repo_url}")
+  print(f"Fetching open issues for {owner}/{repo} (max {MAX_ISSUES})...")
+
+  open_issues = fetch_open_issues(owner, repo, max_issues=MAX_ISSUES)
+  print(f"Found {len(open_issues)} open issues to process.")
+
+  for issue_data in open_issues:
+    fetch_and_save_issue(owner, repo, issue_data, workspace_dir, genai_client)
 
 
 if __name__ == "__main__":
