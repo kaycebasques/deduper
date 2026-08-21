@@ -4,8 +4,13 @@ load("@pypi//:requirements.bzl", "requirement")
 py_binary(
     name = "deduper",
     srcs = ["deduper.py"],
+    data = [
+        ".env",
+    ],
     main = "deduper.py",
     deps = [
+        requirement("google-genai"),
+        requirement("python-dotenv"),
         requirement("requests"),
     ],
 )
