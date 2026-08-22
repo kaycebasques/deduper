@@ -28,3 +28,17 @@ py_binary(
     ],
 )
 
+py_binary(
+    name = "index",
+    srcs = ["index.py"],
+    data = [
+        ".env",
+    ],
+    main = "index.py",
+    deps = [
+        requirement("python-dotenv"),
+        requirement("requests"),
+    ],
+)
+
+
