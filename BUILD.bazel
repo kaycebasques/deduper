@@ -15,3 +15,16 @@ py_binary(
         requirement("requests"),
     ],
 )
+
+py_binary(
+    name = "cluster",
+    srcs = ["cluster.py"],
+    data = [
+        ".env",
+    ],
+    main = "cluster.py",
+    deps = [
+        requirement("python-dotenv"),
+    ],
+)
+
