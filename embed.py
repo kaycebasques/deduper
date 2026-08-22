@@ -60,7 +60,7 @@ def get_github_headers() -> dict[str, str]:
   """Returns request headers for GitHub API, incorporating GITHUB_TOKEN if available."""
   headers = {
       "Accept": "application/vnd.github.raw+json",
-      "User-Agent": "deduper/1.0",
+      "User-Agent": "embed/1.0",
   }
   token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
   if token:
