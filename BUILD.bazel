@@ -2,21 +2,6 @@ load("@rules_python//python:defs.bzl", "py_binary")
 load("@pypi//:requirements.bzl", "requirement")
 
 py_binary(
-    name = "embed",
-    srcs = ["embed.py"],
-    data = [
-        ".env",
-    ],
-    main = "embed.py",
-    deps = [
-        requirement("chonkie"),
-        requirement("google-genai"),
-        requirement("python-dotenv"),
-        requirement("requests"),
-    ],
-)
-
-py_binary(
     name = "cluster",
     srcs = ["cluster.py"],
     data = [
@@ -36,9 +21,9 @@ py_binary(
     ],
     main = "index.py",
     deps = [
+        requirement("chonkie"),
+        requirement("google-genai"),
         requirement("python-dotenv"),
         requirement("requests"),
     ],
 )
-
-
